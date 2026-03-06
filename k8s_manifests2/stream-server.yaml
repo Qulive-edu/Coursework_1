@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stream-server
+  namespace: app-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stream-server
+  template:
+    metadata:
+      labels:
+        app: stream-server
+    spec:
+      containers:
+        - name: stream-server
+          image: qulive/stream-server:latest
+          imagePullPolicy: IfNotPresent  # ✅ Для локальной работы
+          ports:
+            - containerPort: 8080
+          env:
+            - name: VIDEO_DIRECTORY
+              value: "/app/videos"
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+          volumeMounts:
+            - name: videos-volume
+              mountPath: /app/videos
+      volumes:
+        - name: videos-volume
+          # 🪟 Windows + Minikube: используем /host/ для доступа к файлам хоста
+          # Путь: C:\Users\quliv\Downloads\... → /host/c/Users/quliv/Downloads/...
+          hostPath:
+            path: /host/c/Users/quliv/Downloads/Coursework/MM stream 5 containers/videos
+            type: DirectoryOrCreate  # ✅ Создаст папку, если нет
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stream-server
+  namespace: app-namespace
+spec:
+  selector:
+    app: stream-server
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080

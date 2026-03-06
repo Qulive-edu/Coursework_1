@@ -1,85 +1,37 @@
 pipeline {
     agent any
-
     environment {
-        REGISTRY = "docker.io/qulive"
-        CLIENT_IMAGE = "${REGISTRY}/stream-client"
-        SERVER_IMAGE = "${REGISTRY}/stream-server"
+        NAMESPACE = 'app-namespace'
+        MANIFESTS_DIR = 'k8s_manifests2'
     }
 
     stages {
-
-        stage('Install Client Dependencies') {
-            agent {
-                docker {
-                    image 'node:20'
-                }
-            }
+        stage('Checkout Repository') {
             steps {
-                dir('client') {
-                    sh 'npm install'
-                }
+                checkout scm
+                echo "Checked out: ${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
             }
         }
 
-        stage('Build React Client') {
-            agent {
-                docker {
-                    image 'node:20'
+        stage('Deploy to Minikube') {
+            steps {
+                script {
+                    sh 'kubectl cluster-info || (echo "kubectl not configured for Minikube" && exit 1)'
+                    
+                    sh "kubectl apply -f ${MANIFESTS_DIR}/namespace.yaml"
+                    
+                    echo "Applying manifests..."
+                    sh "kubectl apply -f ${MANIFESTS_DIR}/"
+                    
+                    echo "Waiting for deployments..."
+                    sh "kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=60s"
+                    
+                    echo "Deployment status:"
+                    sh "kubectl get pods -n ${NAMESPACE} -o wide"
+                    
                 }
             }
-            steps {
-                dir('client') {
-                    sh 'npm run build'
-                }
-            }
-        }
 
-        stage('Build Go Server') {
-            agent {
-                docker {
-                    image 'golang:1.22'
-                }
-            }
-            steps {
-                dir('stream-server') {
-                    sh 'go build -o server'
-                }
-            }
-        }
-
-        stage('Build Docker Images') {
-            steps {
-                sh "docker build -t $CLIENT_IMAGE:latest ./client"
-                sh "docker build -t $SERVER_IMAGE:latest ./stream-server"
-            }
-        }
-
-        stage('Push Docker Images') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-credentials',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                    sh "docker push $CLIENT_IMAGE:latest"
-                    sh "docker push $SERVER_IMAGE:latest"
-                }
-            }
-        }
-
-        stage('Deploy to Kubernetes') {
-            steps {
-                sh 'kubectl apply -f k8s_manifests2/'
-            }
-        }
-
-        stage('Check Deployment') {
-            steps {
-                sh 'kubectl get pods'
-                sh 'kubectl get services'
-            }
         }
     }
 }
