@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: "nginx"
+    static_configs:
+      - targets: ['nginx-prometheus-exporter:9113']
+
+  - job_name: "stream-server"
+    static_configs:
+      - targets: ['stream-server:8080']
+
+  - job_name: "redis"
+    static_configs:
+      - targets: ['redis-exporter:9121']

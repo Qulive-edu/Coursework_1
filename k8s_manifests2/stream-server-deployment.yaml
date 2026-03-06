@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stream-server
+  namespace: app-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stream-server
+  template:
+    metadata:
+      labels:
+        app: stream-server
+    spec:
+      containers:
+        - name: stream-server
+          image: qulive/stream-server:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: VIDEO_DIRECTORY
+              value: "/app/videos"
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+          volumeMounts:
+            - name: videos-volume
+              mountPath: /app/videos
+      volumes:
+        - name: videos-volume
+          hostPath:
+            path: /home/qulive/Desktop/HW/Coursework/MM\ stream\ 5\ containers/videos

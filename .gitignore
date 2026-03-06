@@ -1,0 +1,9 @@
+client/node_modules
+prometheus/data/
+prometheus/*.log
+prometheus/tmp/
+grafana/data/
+grafana/grafana.db
+grafana/.env
+grafana/logs/
+.env

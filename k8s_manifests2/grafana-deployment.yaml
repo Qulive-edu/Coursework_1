@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: app-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+          envFrom:
+            - configMapRef:
+                name: grafana-env
+      volumes:
+        - name: grafana-data
+          hostPath:
+            path: /home/qulive/Desktop/HW/Coursework/MM\ stream\ 5\ containers/grafana/data
