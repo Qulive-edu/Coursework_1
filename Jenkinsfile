@@ -10,6 +10,11 @@ pipeline {
     stages {
 
         stage('Install Client Dependencies') {
+            agent {
+                docker {
+                    image 'node:20'
+                }
+            }
             steps {
                 dir('client') {
                     sh 'npm install'
@@ -18,6 +23,11 @@ pipeline {
         }
 
         stage('Build React Client') {
+            agent {
+                docker {
+                    image 'node:20'
+                }
+            }
             steps {
                 dir('client') {
                     sh 'npm run build'
@@ -26,6 +36,11 @@ pipeline {
         }
 
         stage('Build Go Server') {
+            agent {
+                docker {
+                    image 'golang:1.22'
+                }
+            }
             steps {
                 dir('stream-server') {
                     sh 'go build -o server'
