@@ -14,6 +14,12 @@ pipeline {
         }
 
         stage('Deploy to Minikube') {
+            agent {
+                docker {
+                    image 'bitnami/kubectl:latest'
+                    args '--network host'
+                }
+            }
             steps {
                 script {
                     sh 'kubectl cluster-info || (echo "kubectl not configured for Minikube" && exit 1)'
