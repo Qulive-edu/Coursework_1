@@ -9,12 +9,6 @@ pipeline {
 
     stages {
 
-        stage('Clone repository') {
-            steps {
-                git 'https://github.com/Qulive-edu/Coursework_1'
-            }
-        }
-
         stage('Install Client Dependencies') {
             steps {
                 dir('client') {
