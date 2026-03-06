@@ -24,7 +24,7 @@ pipeline {
                     bat "kubectl apply -f ${MANIFESTS_DIR}/"
                     
                     echo "Waiting for deployments..."
-                    bat "kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=60s"
+                    bat "kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=180s"
                     
                     echo "Deployment status:"
                     bat "kubectl get pods -n ${NAMESPACE} -o wide"
