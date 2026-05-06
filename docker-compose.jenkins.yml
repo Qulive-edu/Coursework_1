@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  jenkins:
+    container_name: jenkins
+    image: jenkins/jenkins:lts-jdk17
+    restart: always
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - C:\Users\${USERNAME}\.kube\config:/var/jenkins_home/.kube/config:ro
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=true
+
+volumes:
+  jenkins-home:
