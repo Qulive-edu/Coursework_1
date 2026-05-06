@@ -1,24 +1,23 @@
 import React, { useState, useEffect } from "react";
 
 const App = () => {
+  // ✅ Храним просто массив строк: ["video1.mp4", "video2.mp4"]
   const [videos, setVideos] = useState([]);
   const [selectedVideo, setSelectedVideo] = useState(null);
 
   useEffect(() => {
     fetch("http://localhost:8080/videos")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to fetch video list");
-        }
-        return response.json();
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch video list");
+        return res.json();
       })
       .then((data) => {
-        console.log("Fetched videos:", data.videos);
-        setVideos(Array.isArray(data.videos) ? data : []);
+        console.log("Backend ответил:", data);
+        // ✅ Берём именно массив из поля .videos
+        setVideos(Array.isArray(data.videos) ? data.videos : []);
       })
-      .catch((error) => {
-        console.error("Error fetching videos:", error.message);
-        alert(error.message);
+      .catch((err) => {
+        console.error("Error fetching videos:", err);
         setVideos([]);
       });
   }, []);
@@ -26,7 +25,6 @@ const App = () => {
   const uploadVideo = (event) => {
     event.preventDefault();
     const file = event.target.video.files[0];
-
     if (!file) {
       alert("Please select a video file to upload.");
       return;
@@ -36,46 +34,49 @@ const App = () => {
     formData.append("video", file);
 
     fetch("http://localhost:8080/upload", { method: "POST", body: formData })
-      .then((response) => response.text())
-      .then((data) => {
-        alert(data);
+      .then((res) => res.text())
+      .then((msg) => {
+        alert(msg);
+        // ✅ После загрузки заново запрашиваем список
         return fetch("http://localhost:8080/videos");
       })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to fetch updated video list");
-        }
-        return response.json();
-      })
-      .then((updatedVideos) => setVideos(Array.isArray(updatedVideos) ? updatedVideos : []))
-      .catch((error) =>
-        alert("Error uploading file or fetching updated list: " + error.message)
-      );
+      .then((res) => res.json())
+      .then((data) => setVideos(Array.isArray(data.videos) ? data.videos : []))
+      .catch((err) => alert("Error: " + err.message));
   };
 
   return (
-    <div>
+    <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
       <h1>Video Streaming Service</h1>
+      
       <h2>Available Videos</h2>
       <ul>
-        {(Array.isArray(videos.videos) ? videos.videos : []).map((video) => (
-          <li key={video}>
-            <button onClick={() => setSelectedVideo(video)}>{video}</button>
-          </li>
-        ))}
+        {/* ✅ videos - это уже массив, просто мапим */}
+        {videos.length > 0 ? (
+          videos.map((video) => (
+            <li key={video} style={{ marginBottom: "8px" }}>
+              <button onClick={() => setSelectedVideo(video)}>{video}</button>
+            </li>
+          ))
+        ) : (
+          <p>No videos available</p>
+        )}
       </ul>
+
       {selectedVideo && (
-        <video controls autoPlay>
-          <source
-            src={`http://localhost:8080/stream?file=${selectedVideo}`}
-            type="video/mp4"
-          />
-        </video>
+        <div style={{ marginTop: "20px" }}>
+          <h2>Now Playing: {selectedVideo}</h2>
+          <video controls autoPlay style={{ width: "100%", maxWidth: "800px", background: "#000" }}>
+            <source src={`http://localhost:8080/stream?file=${selectedVideo}`} type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
       )}
-      <h2>Upload Video</h2>
+
+      <h2 style={{ marginTop: "30px" }}>Upload Video</h2>
       <form onSubmit={uploadVideo}>
         <input type="file" name="video" accept="video/mp4,video/mkv" />
-        <button type="submit">Upload</button>
+        <button type="submit" style={{ marginLeft: "10px" }}>Upload</button>
       </form>
     </div>
   );

@@ -16,7 +16,7 @@ spec:
       containers:
         - name: stream-server
           image: qulive/stream-server:latest
-          imagePullPolicy: IfNotPresent  # ✅ Для локальной работы
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           env:
@@ -31,11 +31,9 @@ spec:
               mountPath: /app/videos
       volumes:
         - name: videos-volume
-          # 🪟 Windows + Minikube: используем /host/ для доступа к файлам хоста
-          # Путь: C:\Users\quliv\Downloads\... → /host/c/Users/quliv/Downloads/...
           hostPath:
             path: /host/c/Users/quliv/Downloads/Coursework/MM stream 5 containers/videos
-            type: DirectoryOrCreate  # ✅ Создаст папку, если нет
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service

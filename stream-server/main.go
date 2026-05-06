@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -20,47 +19,36 @@ type videos struct {
 	VideoArr []string `json:"videos"`
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-		if r.Method == "OPTIONS" {
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
 func listVideosHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Запрос на /videos пришел")
-	files, err := os.ReadDir("./videos")
+
+	videoDir := os.Getenv("VIDEO_DIRECTORY")
+	if videoDir == "" {
+		videoDir = "./videos"
+	}
+
+	files, err := os.ReadDir(videoDir)
 	if err != nil {
-		http.Error(w, "Ошибка чтения директории", http.StatusInternalServerError)
+		fmt.Printf("Ошибка чтения директории %s: %v\n", videoDir, err)
+		http.Error(w, "Ошибка чтения директории: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	var videoFiles videos
-	fmt.Println(videoFiles)
 	for _, file := range files {
 		if !file.IsDir() && (filepath.Ext(file.Name()) == ".mp4" || filepath.Ext(file.Name()) == ".mkv") {
 			videoFiles.VideoArr = append(videoFiles.VideoArr, file.Name())
-			fmt.Println(videoFiles.VideoArr)
-			fmt.Printf("Видеофайл с именем %s был найден и отправлен", file.Name())
+			fmt.Printf("Найден видеофайл: %s\n", file.Name())
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Println(videoFiles.VideoArr)
-	fmt.Println("Теперь json")
-	js, err := json.Marshal(videoFiles)
-	if err != nil {
-		fmt.Print(err.Error())
+
+	if err := json.NewEncoder(w).Encode(videoFiles); err != nil {
+		fmt.Printf("Ошибка кодирования JSON: %v\n", err)
 	}
-	fmt.Println(string(js))
-	json.NewEncoder(w).Encode(videoFiles)
+
+	fmt.Printf("Отправлено видео: %v\n", videoFiles.VideoArr)
 }
 
 func uploadVideoHandler(w http.ResponseWriter, r *http.Request) {
@@ -128,76 +116,39 @@ func getCachedStreamData(key string) ([]byte, bool) {
 
 func streamHandler(w http.ResponseWriter, r *http.Request) {
 	requestsTotal.Inc()
-	fmt.Println("Получен запрос на потоковую передачу")
-	w.Header().Set("Content-Type", "video/mp4")
-
-	cacheKey := "current_stream"
-	if cachedData, found := getCachedStreamData(cacheKey); found {
-		fmt.Println("Отправляем с кэша")
-		w.Write(cachedData)
-		return
-	}
 
 	file := r.URL.Query().Get("file")
 	if file == "" {
-		fmt.Println("Файл не найден, нет имени")
 		http.Error(w, "Не указано имя файла", http.StatusBadRequest)
 		return
 	}
 
-	filePath := filepath.Join("./videos", file)
+	videoDir := os.Getenv("VIDEO_DIRECTORY")
+	if videoDir == "" {
+		videoDir = "./videos"
+	}
+
+	filePath := filepath.Join(videoDir, file)
+
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		fmt.Printf("Файл не найден: %s\n", filePath)
 		http.Error(w, "Файл не найден", http.StatusNotFound)
 		return
 	}
-	fmt.Printf("Путь до файла: %s", filePath)
 
-	cmd := exec.Command("ffmpeg", "-re", "-i", filePath, "-f", "mp4", "-movflags", "frag_keyframe+empty_moov", "pipe:1")
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		http.Error(w, "Ошибка запуска ffmpeg", http.StatusInternalServerError)
-		return
-	}
-
-	if err := cmd.Start(); err != nil {
-		http.Error(w, "Ошибка выполнения ffmpeg", http.StatusInternalServerError)
-		return
-	}
-
-	dataBuffer := make([]byte, 1024)
-	fmt.Println("Начинается передача видео")
-	for {
-		n, err := stdout.Read(dataBuffer)
-		if n > 0 {
-			w.Write(dataBuffer[:n])
-			cacheStreamData(cacheKey, dataBuffer[:n])
-			w.(http.Flusher).Flush()
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fmt.Println("Ошибка чтения из ffmpeg:", err)
-			break
-		}
-	}
-
-	cmd.Wait()
+	fmt.Printf("Отдаём файл: %s\n", filePath)
+	http.ServeFile(w, r, filePath)
 }
 
 func main() {
 	initRedis()
 
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/videos", listVideosHandler)
-	mux.Handle("/metrics", promhttp.Handler())
-	mux.HandleFunc("/stream", streamHandler)
-	mux.HandleFunc("/upload", uploadVideoHandler)
-
+	http.HandleFunc("/videos", listVideosHandler)
+	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/stream", streamHandler)
+	http.HandleFunc("/upload", uploadVideoHandler)
 	fmt.Println("Потоковый сервер запущен на порту 8080")
-
-	if err := http.ListenAndServe(":8080", corsMiddleware(mux)); err != nil {
+	if err := http.ListenAndServe(":8080", nil); err != nil {
 		fmt.Println("Ошибка при запуске сервера:", err)
 	}
 }
