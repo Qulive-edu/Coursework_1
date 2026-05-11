@@ -19,6 +19,13 @@ type videos struct {
 	VideoArr []string `json:"videos"`
 }
 
+type VideoMeta struct {
+	Name    string    `json:"name"`
+	Size    int64     `json:"size"`
+	ModTime time.Time `json:"mod_time"`
+	Ext     string    `json:"ext"`
+}
+
 func listVideosHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Запрос на /videos пришел")
 
@@ -88,30 +95,74 @@ var (
 			Help: "Total number of HTTP requests",
 		},
 	)
+	cacheHits = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "video_cache_hits_total",
+			Help: "Number of cache hits for video metadata",
+		},
+	)
+	cacheMisses = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "video_cache_misses_total",
+			Help: "Number of cache misses for video metadata",
+		},
+	)
 )
 
 func init() {
-	prometheus.MustRegister(requestsTotal)
+	prometheus.MustRegister(requestsTotal, cacheHits, cacheMisses)
 }
 
-func initRedis() {
+func initRedis() error {
 	redisClient = redis.NewClient(&redis.Options{
-		Addr: "redis:6379",
+		Addr: os.Getenv("REDIS_ADDR"),
+		DB:   0,
 	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("не удалось подключиться к Redis: %w", err)
+	}
+	fmt.Println("Подключено к Redis")
+	return nil
 }
 
-func cacheStreamData(key string, data []byte) {
-	ctx := context.Background()
-	redisClient.Set(ctx, key, data, 10*time.Minute)
+func cacheVideoMeta(key string, meta VideoMeta) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	data, err := json.Marshal(meta)
+	if err != nil {
+		fmt.Printf("Ошибка маршалинга метаданных: %v\n", err)
+		return
+	}
+
+	if err := redisClient.Set(ctx, key, data, 10*time.Minute).Err(); err != nil {
+		fmt.Printf("Ошибка записи в Redis: %v\n", err)
+	}
 }
 
-func getCachedStreamData(key string) ([]byte, bool) {
-	ctx := context.Background()
+func getCachedVideoMeta(key string) (*VideoMeta, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	data, err := redisClient.Get(ctx, key).Bytes()
 	if err == redis.Nil {
 		return nil, false
 	}
-	return data, true
+	if err != nil {
+		fmt.Printf("Ошибка чтения из Redis: %v\n", err)
+		return nil, false
+	}
+
+	var meta VideoMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		fmt.Printf("Ошибка размаршалинга метаданных: %v\n", err)
+		return nil, false
+	}
+	return &meta, true
 }
 
 func streamHandler(w http.ResponseWriter, r *http.Request) {
@@ -123,32 +174,72 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cacheKey := "video:meta:" + file
+
+	if meta, found := getCachedVideoMeta(cacheKey); found {
+		cacheHits.Inc()
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		if err := json.NewEncoder(w).Encode(meta); err != nil {
+			fmt.Printf("Ошибка отправки кэша: %v\n", err)
+		}
+		fmt.Printf("Метаданные отданы из кэша: %s\n", file)
+		return
+	}
+
+	cacheMisses.Inc()
+
 	videoDir := os.Getenv("VIDEO_DIRECTORY")
 	if videoDir == "" {
 		videoDir = "./videos"
 	}
-
 	filePath := filepath.Join(videoDir, file)
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	info, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
 		fmt.Printf("Файл не найден: %s\n", filePath)
 		http.Error(w, "Файл не найден", http.StatusNotFound)
 		return
 	}
+	if err != nil {
+		fmt.Printf("Ошибка stat файла: %v\n", err)
+		http.Error(w, "Ошибка доступа к файлу", http.StatusInternalServerError)
+		return
+	}
 
-	fmt.Printf("Отдаём файл: %s\n", filePath)
-	http.ServeFile(w, r, filePath)
+	meta := VideoMeta{
+		Name:    file,
+		Size:    info.Size(),
+		ModTime: info.ModTime(),
+		Ext:     filepath.Ext(file),
+	}
+
+	go cacheVideoMeta(cacheKey, meta)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Cache", "MISS")
+	if err := json.NewEncoder(w).Encode(meta); err != nil {
+		fmt.Printf("Ошибка отправки метаданных: %v\n", err)
+	}
+	fmt.Printf("Метаданные прочитаны с диска и закэшированы: %s\n", file)
 }
 
 func main() {
-	initRedis()
+	if err := initRedis(); err != nil {
+		fmt.Printf("Redis недоступен: %v (продолжаем без кэша)\n", err)
+	}
 
 	http.HandleFunc("/videos", listVideosHandler)
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/stream", streamHandler)
 	http.HandleFunc("/upload", uploadVideoHandler)
-	fmt.Println("Потоковый сервер запущен на порту 8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Println("Ошибка при запуске сервера:", err)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	fmt.Printf("Потоковый сервер запущен на порту %s\n", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		fmt.Printf("Ошибка при запуске сервера: %v\n", err)
 	}
 }
