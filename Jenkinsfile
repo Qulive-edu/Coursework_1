@@ -1,5 +1,5 @@
 pipeline {
-    agent any  // ← Используем доступный Linux-агент
+    agent any
     
     environment {
         NAMESPACE = 'app-namespace'
@@ -7,28 +7,29 @@ pipeline {
     }
 
     stages {
-        stage('Checkout Repository') {
+        stage('Checkout') {
             steps {
                 checkout scm
-                echo "Checked out: ${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
             }
         }
-
+        
         stage('Deploy') {
+            agent {
+                docker {
+                    image 'bitnami/kubectl:latest'
+                    args '-v /root/.kube:/home/user/.kube:ro -v ${WORKSPACE}:${WORKSPACE}'
+                    alwaysPull true
+                }
+            }
             steps {
                 script {
-                    sh 'kubectl cluster-info || (echo "kubectl not configured" && exit 1)'
-                    
-                    sh "kubectl apply -f ${MANIFESTS_DIR}/namespace.yaml"
-                    
-                    echo "Applying manifests..."
-                    sh "kubectl apply -f ${MANIFESTS_DIR}/"
-                    
-                    echo "Waiting for deployments..."
-                    sh "kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=180s"
-                    
-                    echo "Deployment status:"
-                    sh "kubectl get pods -n ${NAMESPACE} -o wide"
+                    sh '''
+                        kubectl config current-context
+                        kubectl apply -f ${MANIFESTS_DIR}/namespace.yaml
+                        kubectl apply -f ${MANIFESTS_DIR}/
+                        kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=120s
+                        kubectl get pods -n ${NAMESPACE} -o wide
+                    '''
                 }
             }
         }
