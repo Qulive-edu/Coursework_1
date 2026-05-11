@@ -1,5 +1,6 @@
 pipeline {
-    agent any
+    agent any  // ← Используем доступный Linux-агент
+    
     environment {
         NAMESPACE = 'app-namespace'
         MANIFESTS_DIR = 'k8s_manifests2'
@@ -13,25 +14,23 @@ pipeline {
             }
         }
 
-        stage('Deploy to Minikube') {
+        stage('Deploy') {
             steps {
                 script {
-                    bat 'kubectl cluster-info || (echo "kubectl not configured for Minikube" && exit 1)'
+                    sh 'kubectl cluster-info || (echo "kubectl not configured" && exit 1)'
                     
-                    bat "kubectl apply -f ${MANIFESTS_DIR}/namespace.yaml"
+                    sh "kubectl apply -f ${MANIFESTS_DIR}/namespace.yaml"
                     
                     echo "Applying manifests..."
-                    bat "kubectl apply -f ${MANIFESTS_DIR}/"
+                    sh "kubectl apply -f ${MANIFESTS_DIR}/"
                     
                     echo "Waiting for deployments..."
-                    bat "kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=180s"
+                    sh "kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=180s"
                     
                     echo "Deployment status:"
-                    bat "kubectl get pods -n ${NAMESPACE} -o wide"
-                    
+                    sh "kubectl get pods -n ${NAMESPACE} -o wide"
                 }
             }
-
         }
     }
 }
