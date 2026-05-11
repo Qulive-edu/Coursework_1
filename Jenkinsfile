@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'windows' }
+    agent any
     environment {
         NAMESPACE = 'app-namespace'
         MANIFESTS_DIR = 'k8s_manifests2'
