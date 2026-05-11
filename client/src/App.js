@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 
 const App = () => {
-  // ✅ Храним просто массив строк: ["video1.mp4", "video2.mp4"]
   const [videos, setVideos] = useState([]);
   const [selectedVideo, setSelectedVideo] = useState(null);
 
@@ -13,7 +12,6 @@ const App = () => {
       })
       .then((data) => {
         console.log("Backend ответил:", data);
-        // ✅ Берём именно массив из поля .videos
         setVideos(Array.isArray(data.videos) ? data.videos : []);
       })
       .catch((err) => {
@@ -37,7 +35,6 @@ const App = () => {
       .then((res) => res.text())
       .then((msg) => {
         alert(msg);
-        // ✅ После загрузки заново запрашиваем список
         return fetch("http://localhost:8080/videos");
       })
       .then((res) => res.json())
@@ -51,7 +48,6 @@ const App = () => {
       
       <h2>Available Videos</h2>
       <ul>
-        {/* ✅ videos - это уже массив, просто мапим */}
         {videos.length > 0 ? (
           videos.map((video) => (
             <li key={video} style={{ marginBottom: "8px" }}>
