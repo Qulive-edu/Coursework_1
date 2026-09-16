@@ -18,19 +18,20 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    def K8S_SERVER = "https://kubernetes.docker.internal:6443"
+                    def KUBECONFIG_PATH = "/var/jenkins_home/.kube/config"
+                    def K8S_CONTEXT = "docker-desktop" 
                     
                     echo "=== Проверка подключения к кластеру ==="
-                    sh "kubectl --server=${K8S_SERVER} --insecure-skip-tls-verify=true cluster-info"
+                    sh "kubectl --kubeconfig=${KUBECONFIG_PATH} --context=${K8S_CONTEXT} cluster-info"
                     
                     echo "=== Применение манифестов ==="
-                    sh "kubectl --server=${K8S_SERVER} --insecure-skip-tls-verify=true apply -f ${MANIFESTS_DIR}/"
+                    sh "kubectl --kubeconfig=${KUBECONFIG_PATH} --context=${K8S_CONTEXT} apply -f ${MANIFESTS_DIR}/"
                     
                     echo "=== Ожидание готовности деплойментов ==="
-                    sh "kubectl --server=${K8S_SERVER} --insecure-skip-tls-verify=true wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=180s"
+                    sh "kubectl --kubeconfig=${KUBECONFIG_PATH} --context=${K8S_CONTEXT} wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=180s"
                     
                     echo "=== Итоговый статус подов ==="
-                    sh "kubectl --server=${K8S_SERVER} --insecure-skip-tls-verify=true get pods -n ${NAMESPACE} -o wide"
+                    sh "kubectl --kubeconfig=${KUBECONFIG_PATH} --context=${K8S_CONTEXT} get pods -n ${NAMESPACE} -o wide"
                 }
             }
         }
