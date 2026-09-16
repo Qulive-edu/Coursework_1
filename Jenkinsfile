@@ -1,35 +1,34 @@
 pipeline {
-    agent any
-    
+    agent any 
+
     environment {
         NAMESPACE = 'app-namespace'
         MANIFESTS_DIR = 'k8s_manifests2'
+        KUBECONFIG = '/var/jenkins_home/.kube/config'
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout Repository') {
             steps {
                 checkout scm
+                echo "Checked out: ${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
             }
         }
-        
-        stage('Deploy') {
-            agent {
-                docker {
-                    image 'bitnami/kubectl:latest'
-                    args '-v /root/.kube:/home/user/.kube:ro -v ${WORKSPACE}:${WORKSPACE}'
-                    alwaysPull true
-                }
-            }
+
+        stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    sh '''
-                        kubectl config current-context
-                        kubectl apply -f ${MANIFESTS_DIR}/namespace.yaml
-                        kubectl apply -f ${MANIFESTS_DIR}/
-                        kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=120s
-                        kubectl get pods -n ${NAMESPACE} -o wide
-                    '''
+                    echo "Проверка подключения к кластеру"
+                    sh 'kubectl cluster-info'
+                    
+                    echo "Применение манифестов"
+                    sh "kubectl apply -f ${MANIFESTS_DIR}/"
+                    
+                    echo "Ожидание готовности деплойментов"
+                    sh "kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=180s"
+                    
+                    echo "Итоговый статус подов"
+                    sh "kubectl get pods -n ${NAMESPACE} -o wide"
                 }
             }
         }
