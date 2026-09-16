@@ -18,17 +18,19 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    echo "Проверка подключения к кластеру"
-                    sh 'kubectl cluster-info'
+                    def K8S_SERVER = "https://kubernetes.docker.internal:6443"
                     
-                    echo "Применение манифестов"
-                    sh "kubectl apply -f ${MANIFESTS_DIR}/"
+                    echo "=== Проверка подключения к кластеру ==="
+                    sh "kubectl --server=${K8S_SERVER} --insecure-skip-tls-verify=true cluster-info"
                     
-                    echo "Ожидание готовности деплойментов"
-                    sh "kubectl wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=180s"
+                    echo "=== Применение манифестов ==="
+                    sh "kubectl --server=${K8S_SERVER} --insecure-skip-tls-verify=true apply -f ${MANIFESTS_DIR}/"
                     
-                    echo "Итоговый статус подов"
-                    sh "kubectl get pods -n ${NAMESPACE} -o wide"
+                    echo "=== Ожидание готовности деплойментов ==="
+                    sh "kubectl --server=${K8S_SERVER} --insecure-skip-tls-verify=true wait --for=condition=available deployment --all -n ${NAMESPACE} --timeout=180s"
+                    
+                    echo "=== Итоговый статус подов ==="
+                    sh "kubectl --server=${K8S_SERVER} --insecure-skip-tls-verify=true get pods -n ${NAMESPACE} -o wide"
                 }
             }
         }
