@@ -19,7 +19,7 @@ pipeline {
             steps {
                 script {
                     def KUBECONFIG_PATH = "/var/jenkins_home/.kube/config"
-                    def K8S_CONTEXT = "docker-desktop" 
+                    def K8S_CONTEXT = "minikube" 
                     
                     echo "=== Проверка подключения к кластеру ==="
                     sh "kubectl --kubeconfig=${KUBECONFIG_PATH} --context=${K8S_CONTEXT} cluster-info"
